@@ -2,47 +2,18 @@ import { useRef, useState, useCallback } from 'react';
 
 type Panel = 'compress' | 'cutout' | 'convert' | 'resize';
 
-function EmbedPanel({ url, title, fallbackUrl }: { url: string; title: string; fallbackUrl: string }) {
-  const [embedFailed, setEmbedFailed] = useState(false);
-
-  if (embedFailed) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16">
-        <div className="text-5xl mb-4">🔗</div>
-        <p className="text-gray-500 mb-4">嵌入加载失败，请直接访问</p>
-        <a
-          href={fallbackUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="px-6 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
-        >
-          前往 {title} →
-        </a>
-      </div>
-    );
-  }
-
-  return (
-    <div className="w-full h-[600px] rounded-xl overflow-hidden border border-gray-200 bg-white">
-      <iframe
-        src={url}
-        title={title}
-        className="w-full h-full"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-        onError={() => setEmbedFailed(true)}
-      />
-    </div>
-  );
-}
-
 export default function ImageWorkshop() {
   const [activePanel, setActivePanel] = useState<Panel>('compress');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [resultUrl, setResultUrl] = useState<string | null>(null);
+  const [resultSize, setResultSize] = useState<string>('');
   const [outputWidth, setOutputWidth] = useState(800);
   const [outputHeight, setOutputHeight] = useState(600);
   const [outputFormat, setOutputFormat] = useState('png');
+  const [quality, setQuality] = useState(0.7);
   const [processing, setProcessing] = useState(false);
+  const [statusMsg, setStatusMsg] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const panels: { key: Panel; label: string; icon: string; desc: string }[] = [
@@ -56,14 +27,25 @@ export default function ImageWorkshop() {
     const file = e.target.files?.[0];
     if (!file) return;
     setSelectedFile(file);
+    setResultUrl(null);
+    setResultSize('');
+    setStatusMsg('');
     const reader = new FileReader();
     reader.onload = (ev) => setPreview(ev.target?.result as string);
     reader.readAsDataURL(file);
   }, []);
 
+  const resetResult = () => {
+    setResultUrl(null);
+    setResultSize('');
+    setStatusMsg('');
+  };
+
   const handleCompress = useCallback(() => {
     if (!selectedFile || !preview) return;
     setProcessing(true);
+    setStatusMsg('压缩中...');
+    resetResult();
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
@@ -75,24 +57,59 @@ export default function ImageWorkshop() {
         (blob) => {
           if (blob) {
             const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `compressed_${selectedFile.name}`;
-            a.click();
-            URL.revokeObjectURL(url);
+            setResultUrl(url);
+            const sizeKB = (blob.size / 1024).toFixed(1);
+            const origKB = (selectedFile.size / 1024).toFixed(1);
+            const saved = ((1 - blob.size / selectedFile.size) * 100).toFixed(1);
+            setResultSize(`${origKB}KB → ${sizeKB}KB (省 ${saved}%)`);
+            setStatusMsg('');
           }
           setProcessing(false);
         },
         'image/jpeg',
-        0.7
+        quality
       );
     };
     img.src = preview;
-  }, [selectedFile, preview]);
+  }, [selectedFile, preview, quality]);
+
+  const handleCutout = useCallback(async () => {
+    if (!selectedFile) return;
+    setProcessing(true);
+    setStatusMsg('抠图中...');
+    resetResult();
+
+    try {
+      const formData = new FormData();
+      formData.append('image_file', selectedFile);
+
+      const res = await fetch('https://api.remove.bg/v1.0/removebg', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        // 如果 free API 失败，提示用户
+        throw new Error('API 请求失败');
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      setResultUrl(url);
+      setResultSize('已去除背景');
+      setStatusMsg('');
+    } catch {
+      setStatusMsg('免费额度可能已用完，建议前往 remove.bg 操作');
+      setTimeout(() => setStatusMsg(''), 3000);
+    }
+    setProcessing(false);
+  }, [selectedFile]);
 
   const handleConvert = useCallback(() => {
     if (!selectedFile || !preview) return;
     setProcessing(true);
+    setStatusMsg('转换中...');
+    resetResult();
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
@@ -104,11 +121,9 @@ export default function ImageWorkshop() {
         (blob) => {
           if (blob) {
             const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `converted_${selectedFile.name.split('.')[0]}.${outputFormat}`;
-            a.click();
-            URL.revokeObjectURL(url);
+            setResultUrl(url);
+            setResultSize(`${(blob.size / 1024).toFixed(1)}KB`);
+            setStatusMsg('');
           }
           setProcessing(false);
         },
@@ -122,6 +137,8 @@ export default function ImageWorkshop() {
   const handleResize = useCallback(() => {
     if (!selectedFile || !preview) return;
     setProcessing(true);
+    setStatusMsg('调整中...');
+    resetResult();
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
@@ -133,11 +150,9 @@ export default function ImageWorkshop() {
         (blob) => {
           if (blob) {
             const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `resized_${selectedFile.name}`;
-            a.click();
-            URL.revokeObjectURL(url);
+            setResultUrl(url);
+            setResultSize(`${outputWidth} × ${outputHeight} · ${(blob.size / 1024).toFixed(1)}KB`);
+            setStatusMsg('');
           }
           setProcessing(false);
         },
@@ -148,10 +163,25 @@ export default function ImageWorkshop() {
     img.src = preview;
   }, [selectedFile, preview, outputWidth, outputHeight, outputFormat]);
 
+  const handleDownload = () => {
+    if (!resultUrl || !selectedFile) return;
+    const a = document.createElement('a');
+    a.href = resultUrl;
+    const ext = activePanel === 'compress' ? 'jpg' : outputFormat;
+    const prefix = activePanel === 'compress' ? 'compressed' : activePanel === 'cutout' ? 'cutout' : activePanel === 'convert' ? 'converted' : 'resized';
+    a.download = `${prefix}_${selectedFile.name.split('.')[0]}.${ext}`;
+    a.click();
+  };
+
+  const handlePanelChange = (p: Panel) => {
+    setActivePanel(p);
+    resetResult();
+  };
+
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">图片处理工坊</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">图片处理工坊</h1>
         <p className="text-gray-500">压缩、抠图、格式转换、尺寸调整，一站搞定</p>
       </div>
 
@@ -161,18 +191,18 @@ export default function ImageWorkshop() {
           {panels.map(p => (
             <button
               key={p.key}
-              onClick={() => setActivePanel(p.key)}
-              className={`w-full text-left px-4 py-3 rounded-xl transition-all ${
+              onClick={() => handlePanelChange(p.key)}
+              className={`w-full text-left px-4 py-3.5 rounded-xl transition-all ${
                 activePanel === p.key
-                  ? 'bg-purple-600 text-white shadow-lg shadow-purple-200'
-                  : 'bg-white text-gray-700 hover:bg-purple-50 border border-gray-200'
+                  ? 'bg-violet-50 text-violet-700 border border-violet-200 shadow-sm'
+                  : 'bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 border border-gray-200'
               }`}
             >
               <div className="flex items-center gap-3">
                 <span className="text-2xl">{p.icon}</span>
                 <div>
                   <div className="font-medium text-sm">{p.label}</div>
-                  <div className={`text-xs ${activePanel === p.key ? 'text-purple-200' : 'text-gray-400'}`}>
+                  <div className={`text-xs ${activePanel === p.key ? 'text-violet-500' : 'text-gray-400'}`}>
                     {p.desc}
                   </div>
                 </div>
@@ -182,66 +212,92 @@ export default function ImageWorkshop() {
         </div>
 
         {/* 右侧操作区 */}
-        <div className="lg:col-span-3 bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-          {activePanel === 'cutout' ? (
-            <EmbedPanel
-              url="https://www.koukoutu.com"
-              title="抠图"
-              fallbackUrl="https://www.koukoutu.com"
-            />
-          ) : activePanel === 'compress' && !selectedFile ? (
-            <EmbedPanel
-              url="https://tinypng.com"
-              title="TinyPNG"
-              fallbackUrl="https://tinypng.com"
-            />
-          ) : (
-            <div>
-              {/* 上传区域 */}
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center cursor-pointer hover:border-purple-400 hover:bg-purple-50/50 transition-all mb-6"
-              >
-                {preview ? (
-                  <div className="flex flex-col items-center">
-                    <img src={preview} alt="预览" className="max-h-48 rounded-lg shadow-sm mb-3" />
-                    <p className="text-sm text-gray-500">{selectedFile?.name}</p>
-                    <p className="text-xs text-gray-400 mt-1">点击重新选择</p>
-                  </div>
-                ) : (
-                  <div>
-                    <div className="text-5xl mb-3">📁</div>
-                    <p className="text-gray-600 font-medium">点击或拖拽上传图片</p>
-                    <p className="text-sm text-gray-400 mt-1">支持 JPG / PNG / WebP</p>
-                  </div>
-                )}
+        <div className="lg:col-span-3 bg-white rounded-2xl p-6 border border-gray-200">
+          {/* 上传区域 */}
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center cursor-pointer hover:border-violet-300 hover:bg-violet-50/30 transition-all mb-6"
+          >
+            {preview ? (
+              <div className="flex flex-col items-center">
+                <img src={preview} alt="预览" className="max-h-48 rounded-lg shadow mb-3" />
+                <p className="text-sm text-gray-600">{selectedFile?.name}</p>
+                <p className="text-xs text-gray-400 mt-1">点击重新选择</p>
               </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleFileSelect}
-              />
+            ) : (
+              <div>
+                <div className="text-5xl mb-3">📁</div>
+                <p className="text-gray-700 font-medium">点击或拖拽上传图片</p>
+                <p className="text-sm text-gray-400 mt-1">支持 JPG / PNG / WebP</p>
+              </div>
+            )}
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFileSelect}
+          />
 
-              {/* 操作区域 */}
-              {activePanel === 'compress' && selectedFile && (
-                <div className="flex items-center justify-between">
+          {/* 状态消息 */}
+          {statusMsg && (
+            <div className="mb-4 px-4 py-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg">
+              {statusMsg}
+            </div>
+          )}
+
+          {/* 操作区域 */}
+          {selectedFile && !resultUrl && (
+            <div>
+              {/* 压缩面板 */}
+              {activePanel === 'compress' && (
+                <div className="space-y-4">
                   <div>
-                    <p className="font-medium text-gray-700">本地压缩</p>
-                    <p className="text-sm text-gray-400">压缩为 JPEG，质量约 70%</p>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="font-medium text-gray-700">压缩质量</label>
+                      <span className="text-sm text-gray-500">{Math.round(quality * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.1"
+                      max="1"
+                      step="0.05"
+                      value={quality}
+                      onChange={e => setQuality(Number(e.target.value))}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-violet-500"
+                    />
+                    <div className="flex justify-between text-xs text-gray-400 mt-1">
+                      <span>高压缩</span>
+                      <span>高质量</span>
+                    </div>
                   </div>
                   <button
                     onClick={handleCompress}
                     disabled={processing}
-                    className="px-6 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors font-medium"
+                    className="w-full px-6 py-3 bg-violet-500 text-white rounded-xl hover:bg-violet-600 disabled:opacity-50 transition-colors font-medium"
                   >
                     {processing ? '处理中...' : '开始压缩'}
                   </button>
                 </div>
               )}
 
-              {activePanel === 'convert' && selectedFile && (
+              {/* 抠图面板 */}
+              {activePanel === 'cutout' && (
+                <div>
+                  <p className="text-sm text-gray-500 mb-4">使用 AI 自动去除图片背景，输出透明 PNG</p>
+                  <button
+                    onClick={handleCutout}
+                    disabled={processing}
+                    className="w-full px-6 py-3 bg-violet-500 text-white rounded-xl hover:bg-violet-600 disabled:opacity-50 transition-colors font-medium"
+                  >
+                    {processing ? '抠图中...' : '开始抠图'}
+                  </button>
+                </div>
+              )}
+
+              {/* 格式转换面板 */}
+              {activePanel === 'convert' && (
                 <div>
                   <p className="font-medium text-gray-700 mb-3">输出格式</p>
                   <div className="flex gap-2 mb-4">
@@ -251,8 +307,8 @@ export default function ImageWorkshop() {
                         onClick={() => setOutputFormat(fmt)}
                         className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
                           outputFormat === fmt
-                            ? 'bg-purple-600 text-white'
-                            : 'bg-gray-100 text-gray-600 hover:bg-purple-50'
+                            ? 'bg-violet-500 text-white'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                         }`}
                       >
                         {fmt.toUpperCase()}
@@ -262,14 +318,15 @@ export default function ImageWorkshop() {
                   <button
                     onClick={handleConvert}
                     disabled={processing}
-                    className="px-6 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors font-medium"
+                    className="w-full px-6 py-3 bg-violet-500 text-white rounded-xl hover:bg-violet-600 disabled:opacity-50 transition-colors font-medium"
                   >
                     {processing ? '处理中...' : '开始转换'}
                   </button>
                 </div>
               )}
 
-              {activePanel === 'resize' && selectedFile && (
+              {/* 尺寸调整面板 */}
+              {activePanel === 'resize' && (
                 <div>
                   <p className="font-medium text-gray-700 mb-3">目标尺寸（像素）</p>
                   <div className="flex gap-4 mb-4">
@@ -279,7 +336,7 @@ export default function ImageWorkshop() {
                         type="number"
                         value={outputWidth}
                         onChange={e => setOutputWidth(Number(e.target.value))}
-                        className="w-32 px-3 py-2 border border-gray-200 rounded-lg focus:border-purple-400 outline-none"
+                        className="w-32 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:border-violet-400 outline-none text-gray-900"
                       />
                     </div>
                     <div>
@@ -288,19 +345,53 @@ export default function ImageWorkshop() {
                         type="number"
                         value={outputHeight}
                         onChange={e => setOutputHeight(Number(e.target.value))}
-                        className="w-32 px-3 py-2 border border-gray-200 rounded-lg focus:border-purple-400 outline-none"
+                        className="w-32 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:border-violet-400 outline-none text-gray-900"
                       />
                     </div>
                   </div>
                   <button
                     onClick={handleResize}
                     disabled={processing}
-                    className="px-6 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors font-medium"
+                    className="w-full px-6 py-3 bg-violet-500 text-white rounded-xl hover:bg-violet-600 disabled:opacity-50 transition-colors font-medium"
                   >
                     {processing ? '处理中...' : '开始调整'}
                   </button>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* 结果预览 */}
+          {resultUrl && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-gray-700">处理结果</p>
+                  {resultSize && <p className="text-sm text-gray-500">{resultSize}</p>}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={resetResult}
+                    className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm"
+                  >
+                    重新处理
+                  </button>
+                  <button
+                    onClick={handleDownload}
+                    className="px-5 py-2 bg-violet-500 text-white rounded-lg hover:bg-violet-600 transition-colors font-medium text-sm"
+                  >
+                    ⬇ 下载
+                  </button>
+                </div>
+              </div>
+              {/* 抠图结果需要棋盘格背景显示透明度 */}
+              <div
+                className={`rounded-xl overflow-hidden max-h-96 flex items-center justify-center ${
+                  activePanel === 'cutout' ? 'bg-[url("data:image/svg+xml,%3Csvg width=\'20\' height=\'20\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Crect width=\'10\' height=\'10\' fill=\'%23ccc\'/%3E%3Crect x=\'10\' y=\'10\' width=\'10\' height=\'10\' fill=\'%23ccc\'/%3E%3Crect x=\'10\' width=\'10\' height=\'10\' fill=\'%23fff\'/%3E%3Crect y=\'10\' width=\'10\' height=\'10\' fill=\'%23fff\'/%3E%3C/svg%3E")]' : 'bg-gray-50'
+                }`}
+              >
+                <img src={resultUrl} alt="处理结果" className="max-h-96 object-contain" />
+              </div>
             </div>
           )}
         </div>

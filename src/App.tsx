@@ -7,7 +7,7 @@ import Settings from './pages/Settings';
 type Page = 'ai-tools' | 'image-workshop' | 'my-tools' | 'settings';
 
 const navItems: { key: Page; label: string; icon: string }[] = [
-  { key: 'ai-tools', label: 'AI 工具库', icon: '🤖' },
+  { key: 'ai-tools', label: 'AI 工具库', icon: '✨' },
   { key: 'image-workshop', label: '图片工坊', icon: '🖼️' },
   { key: 'my-tools', label: '我的工具', icon: '🧰' },
   { key: 'settings', label: '设置', icon: '⚙️' },
@@ -26,25 +26,23 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50">
+    <div className="min-h-screen bg-gray-50 text-gray-900">
       {/* 顶部导航 */}
-      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-lg border-b border-gray-100">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-md shadow-purple-200">
-                DT
-              </div>
-              <span className="font-bold text-gray-800 text-lg hidden sm:block">设计师工具箱</span>
+            <div className="flex items-center gap-3">
+              <img src="/logo.png" alt="Logo" className="h-9 w-9 rounded-lg object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              <span className="font-bold text-gray-900 text-lg hidden sm:block">设计师工具箱</span>
             </div>
-            <nav className="flex items-center gap-1">
+            <nav className="flex items-center gap-1 bg-gray-100 rounded-2xl p-1">
               {navItems.map(item => (
                 <button
                   key={item.key}
                   onClick={() => setCurrentPage(item.key)}
                   className={`px-3 sm:px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-1.5 ${
                     currentPage === item.key
-                      ? 'bg-purple-100 text-purple-700'
+                      ? 'bg-white text-gray-900 shadow-sm'
                       : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                   }`}
                 >
@@ -58,7 +56,7 @@ export default function App() {
       </header>
 
       {/* 主内容 */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
         {renderPage()}
       </main>
 
