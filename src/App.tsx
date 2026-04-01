@@ -6,12 +6,31 @@ import Settings from './pages/Settings';
 
 type Page = 'ai-tools' | 'image-workshop' | 'my-tools' | 'settings';
 
-const navItems: { key: Page; label: string; icon: string }[] = [
-  { key: 'ai-tools', label: 'AI 工具库', icon: '✨' },
-  { key: 'image-workshop', label: '图片工坊', icon: '🖼️' },
-  { key: 'my-tools', label: '我的工具', icon: '🧰' },
-  { key: 'settings', label: '设置', icon: '⚙️' },
+const navItems: { key: Page; label: string }[] = [
+  { key: 'ai-tools', label: 'AI 工具库' },
+  { key: 'image-workshop', label: '图片工坊' },
+  { key: 'my-tools', label: '我的工具' },
+  { key: 'settings', label: '设置' },
 ];
+
+function Logo() {
+  const [imgError, setImgError] = useState(false);
+  if (imgError) {
+    return (
+      <div className="w-9 h-9 bg-violet-500 rounded-lg flex items-center justify-center text-white font-bold text-sm shrink-0">
+        DT
+      </div>
+    );
+  }
+  return (
+    <img
+      src="/logo.png"
+      alt="Logo"
+      className="h-9 w-9 rounded-lg object-contain shrink-0"
+      onError={() => setImgError(true)}
+    />
+  );
+}
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('ai-tools');
@@ -32,7 +51,7 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
-              <img src="/logo.png" alt="Logo" className="h-9 w-9 rounded-lg object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              <Logo />
               <span className="font-bold text-gray-900 text-lg hidden sm:block">设计师工具箱</span>
             </div>
             <nav className="flex items-center gap-1 bg-gray-100 rounded-2xl p-1">
@@ -40,14 +59,13 @@ export default function App() {
                 <button
                   key={item.key}
                   onClick={() => setCurrentPage(item.key)}
-                  className={`px-3 sm:px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-1.5 ${
+                  className={`px-3 sm:px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                     currentPage === item.key
                       ? 'bg-white text-gray-900 shadow-sm'
                       : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                   }`}
                 >
-                  <span className="text-base">{item.icon}</span>
-                  <span className="hidden sm:inline">{item.label}</span>
+                  {item.label}
                 </button>
               ))}
             </nav>

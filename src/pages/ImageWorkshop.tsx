@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback } from 'react';
+import { getApiKeys } from '../data/storage';
 
 type Panel = 'compress' | 'cutout' | 'convert' | 'resize';
 
@@ -41,6 +42,11 @@ export default function ImageWorkshop() {
     setStatusMsg('');
   };
 
+  const handlePanelChange = (p: Panel) => {
+    setActivePanel(p);
+    resetResult();
+  };
+
   const handleCompress = useCallback(() => {
     if (!selectedFile || !preview) return;
     setProcessing(true);
@@ -60,8 +66,13 @@ export default function ImageWorkshop() {
             setResultUrl(url);
             const sizeKB = (blob.size / 1024).toFixed(1);
             const origKB = (selectedFile.size / 1024).toFixed(1);
-            const saved = ((1 - blob.size / selectedFile.size) * 100).toFixed(1);
-            setResultSize(`${origKB}KB → ${sizeKB}KB (省 ${saved}%)`);
+            const ratio = blob.size / selectedFile.size;
+            const saved = ((1 - ratio) * 100).toFixed(1);
+            if (ratio >= 1) {
+              setResultSize(`${origKB}KB → ${sizeKB}KB (原文件已很小，压缩后反而略大)`);
+            } else {
+              setResultSize(`${origKB}KB → ${sizeKB}KB (省 ${saved}%)`);
+            }
             setStatusMsg('');
           }
           setProcessing(false);
@@ -75,6 +86,14 @@ export default function ImageWorkshop() {
 
   const handleCutout = useCallback(async () => {
     if (!selectedFile) return;
+
+    const { removebg: apiKey } = getApiKeys();
+    if (!apiKey) {
+      setStatusMsg('请先在设置页配置 Remove.bg API Key');
+      setTimeout(() => setStatusMsg(''), 4000);
+      return;
+    }
+
     setProcessing(true);
     setStatusMsg('抠图中...');
     resetResult();
@@ -85,22 +104,26 @@ export default function ImageWorkshop() {
 
       const res = await fetch('https://api.remove.bg/v1.0/removebg', {
         method: 'POST',
+        headers: { 'X-Api-Key': apiKey },
         body: formData,
       });
 
       if (!res.ok) {
-        // 如果 free API 失败，提示用户
-        throw new Error('API 请求失败');
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData?.errors?.[0]?.title || `API 错误 (${res.status})`);
       }
 
       const blob = await res.blob();
+      if (blob.size < 100) {
+        throw new Error('返回结果异常，可能额度已用完');
+      }
       const url = URL.createObjectURL(blob);
       setResultUrl(url);
       setResultSize('已去除背景');
       setStatusMsg('');
-    } catch {
-      setStatusMsg('免费额度可能已用完，建议前往 remove.bg 操作');
-      setTimeout(() => setStatusMsg(''), 3000);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '抠图失败';
+      setStatusMsg(`抠图失败：${msg}`);
     }
     setProcessing(false);
   }, [selectedFile]);
@@ -167,15 +190,10 @@ export default function ImageWorkshop() {
     if (!resultUrl || !selectedFile) return;
     const a = document.createElement('a');
     a.href = resultUrl;
-    const ext = activePanel === 'compress' ? 'jpg' : outputFormat;
+    const ext = activePanel === 'compress' ? 'jpg' : activePanel === 'cutout' ? 'png' : outputFormat;
     const prefix = activePanel === 'compress' ? 'compressed' : activePanel === 'cutout' ? 'cutout' : activePanel === 'convert' ? 'converted' : 'resized';
     a.download = `${prefix}_${selectedFile.name.split('.')[0]}.${ext}`;
     a.click();
-  };
-
-  const handlePanelChange = (p: Panel) => {
-    setActivePanel(p);
-    resetResult();
   };
 
   return (
@@ -242,7 +260,11 @@ export default function ImageWorkshop() {
 
           {/* 状态消息 */}
           {statusMsg && (
-            <div className="mb-4 px-4 py-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className={`mb-4 px-4 py-2.5 text-sm rounded-lg border ${
+              statusMsg.includes('失败') || statusMsg.includes('请先')
+                ? 'text-amber-700 bg-amber-50 border-amber-200'
+                : 'text-violet-700 bg-violet-50 border-violet-200'
+            }`}>
               {statusMsg}
             </div>
           )}
@@ -285,14 +307,24 @@ export default function ImageWorkshop() {
               {/* 抠图面板 */}
               {activePanel === 'cutout' && (
                 <div>
-                  <p className="text-sm text-gray-500 mb-4">使用 AI 自动去除图片背景，输出透明 PNG</p>
-                  <button
-                    onClick={handleCutout}
-                    disabled={processing}
-                    className="w-full px-6 py-3 bg-violet-500 text-white rounded-xl hover:bg-violet-600 disabled:opacity-50 transition-colors font-medium"
-                  >
-                    {processing ? '抠图中...' : '开始抠图'}
-                  </button>
+                  <p className="text-sm text-gray-500 mb-4">使用 Remove.bg AI 去除图片背景，需要 API Key</p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleCutout}
+                      disabled={processing}
+                      className="flex-1 px-6 py-3 bg-violet-500 text-white rounded-xl hover:bg-violet-600 disabled:opacity-50 transition-colors font-medium"
+                    >
+                      {processing ? '抠图中...' : '开始抠图'}
+                    </button>
+                    <a
+                      href="https://www.remove.bg/api"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-3 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 transition-colors font-medium text-sm"
+                    >
+                      获取 Key
+                    </a>
+                  </div>
                 </div>
               )}
 
