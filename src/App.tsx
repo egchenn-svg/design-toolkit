@@ -1,14 +1,12 @@
 import { useState } from 'react';
 import AITools from './pages/AITools';
-import ImageWorkshop from './pages/ImageWorkshop';
 import MyTools from './pages/MyTools';
 import Settings from './pages/Settings';
 
-type Page = 'ai-tools' | 'image-workshop' | 'my-tools' | 'settings';
+type Page = 'ai-tools' | 'my-tools' | 'settings';
 
 const navItems: { key: Page; label: string }[] = [
   { key: 'ai-tools', label: 'AI 工具库' },
-  { key: 'image-workshop', label: '图片工坊' },
   { key: 'my-tools', label: '我的工具' },
   { key: 'settings', label: '设置' },
 ];
@@ -38,7 +36,6 @@ export default function App() {
   const renderPage = () => {
     switch (currentPage) {
       case 'ai-tools': return <AITools />;
-      case 'image-workshop': return <ImageWorkshop />;
       case 'my-tools': return <MyTools />;
       case 'settings': return <Settings />;
     }
