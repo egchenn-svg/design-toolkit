@@ -257,6 +257,18 @@ export const aiTools: AITool[] = [
     free: true,
     color: 'from-violet-500 to-indigo-600',
   },
+  {
+    id: 'color-converter',
+    name: '颜色转换器',
+    nameEn: 'Color Converter',
+    category: '设计资源',
+    description: 'RGB、HEX、HSL等颜色格式互转',
+    url: 'https://www.sioe.cn/yingyong/yanse-rgb-16/',
+    icon: '🎨',
+    tags: ['颜色', 'RGB', 'HEX', '转换'],
+    free: true,
+    color: 'from-orange-500 to-yellow-500',
+  },
 ];
 
 export const categories = ['AI 创作工具', '图片处理', '设计资源'];
